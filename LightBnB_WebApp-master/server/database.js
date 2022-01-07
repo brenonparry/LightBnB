@@ -112,13 +112,69 @@ const getAllProperties = function(options, limit = 10) {
   //   limitedProperties[i] = properties[i];
   // }
   // return Promise.resolve(limitedProperties);
+  const queryParams = [];
+  let queryString = `
+  SELECT properties.*, avg(property_reviews.rating) as average_rating
+  FROM properties
+  JOIN property_reviews ON properties.id = property_id
+  `;
+  // Check if a city has been passed in as an option.
+  if (options.city) {
+    console.log('options.city: ', options.city);
+    queryParams.push(`%${options.city}%`);
+    queryString += `WHERE city LIKE $${queryParams.length} `;
+  }
+  // Check if an owner_id has been passed in as an option.
+  if (options.owner_id) {
+    console.log('options.owner_id: ', options.owner_id);
+    queryParams.push(options.owner_id);
+    queryString += `AND owner_id = $${queryParams.length} `;
+  }
+  // Check if minimum_price_per_night has been passed in as an option
+  if (options.minimum_price_per_night) {
+    console.log('options.minimum_price_per_night: ', options.minimum_price_per_night);
+    queryParams.push(Number(options.minimum_price_per_night));
+    if (queryParams.length === 1) {
+      queryString += `WHERE properties.cost_per_night/100 >= $${queryParams.length} `;
+  } else {
+    queryString += `AND properties.cost_per_night/100 >= $${queryParams.length} `;
+  }
+  }
+
+  // Check if maximum_price_per_night has been passed in as an option
+  if (options.maximum_price_per_night) {
+    console.log('options.maximum_price_per_night: ', options.maximum_price_per_night);
+    queryParams.push(Number(options.maximum_price_per_night));
+    if (queryParams.length === 1) {
+      queryString += `WHERE properties.cost_per_night/100 <= $${queryParams.length} `;
+  } else {
+    queryString += `AND properties.cost_per_night/100 <= $${queryParams.length} `;
+  }
+  } 
+
+  // GROUP BY has to preceed a HAVING statement like in the case of minimum rating being passed in
+  queryString += `GROUP BY properties.id` 
+
+  // Check if minimum_rating has been passed in as an option
+  if (options.minimum_rating) {
+    console.log('options.minimum_rating: ', options.minimum_rating);
+    queryParams.push(Number(options.minimum_rating));
+    queryString += ` HAVING AVG(property_reviews.rating) >= $${queryParams.length} `;
+  }
+
+  queryParams.push(limit);
+  queryString += `
+  ORDER BY cost_per_night
+  LIMIT $${queryParams.length};
+  `;
+
+  console.log(queryString, queryParams);
+  console.log('options: ', options)
 
   return pool
-    .query(`SELECT * FROM properties LIMIT $1`, [limit])
-    .then((result) => result.rows)
-    .catch((err) => {
-      console.log(err.message);
-    });
+    .query(queryString, queryParams)
+    .then((result) => result.rows);
+
 };
 
 exports.getAllProperties = getAllProperties;
